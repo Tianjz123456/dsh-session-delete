@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "title": "Delete Session",
+    "description": "Adds “Delete session” to the session menu, permanently removing the session log, projection cache and its workspace reference."
+  },
+  "delete": {
+    "label": "Delete session",
+    "confirmTitle": "Delete session",
+    "confirm": "Permanently delete this conversation?",
+    "irreversible": "This deletes the session log and projection cache and removes the session from its workspace. This cannot be undone.",
+    "pending": "Deleting…",
+    "error": "Delete failed",
+    "currentRefusal": "The current session is in use and cannot be deleted. Switch to another session first."
+  }
+}

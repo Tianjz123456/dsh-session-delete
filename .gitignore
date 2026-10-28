@@ -1,0 +1,16 @@
+# Local environment / user state
+.env
+.env.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Node
+node_modules/
+npm-debug.log*
