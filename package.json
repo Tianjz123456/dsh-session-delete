@@ -1,10 +1,16 @@
 {
-  "name": "@local/dsh-session-delete",
+  "name": "dsh-session-delete",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "license": "MIT",
   "description": "在会话菜单中新增“删除会话”：完整删除会话日志、投影缓存并从工作区中移除引用",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/tianjingzai/dsh-session-delete.git"
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.3"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -17,6 +23,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "README.md",
     "LICENSE"
   ],
   "dsh": {

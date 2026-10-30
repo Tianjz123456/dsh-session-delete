@@ -37,27 +37,36 @@
 
 ## 安装
 
-> 推荐使用 DSH 的 Bundle 安装能力（`plugin_manager` → `install_bundle`），它会完成依赖落位、补丁合并与启用。下方“手动安装”仅作为没有该入口时的替代。
+> 推荐使用 DSH 的 Bundle 安装能力（插件管理 / `plugin_manager` → `install_bundle`），它会完成依赖落位、补丁合并与启用。**不要**在 profile 目录里手动执行 `pnpm add`：pnpm 只会把包装进 `node_modules`，不会把它注册为 DSH 的 bundle 层（`dsh.profile.bundles`），装完插件不会生效。下方"手动放置"仅作为没有该入口时的替代。
 
-### 方式一：Bundle 安装（推荐）
+### 方式一：通过链接安装（推荐，发给其他人也是这条）
 
-1. 将本目录（或发行包解压目录）放置到你的工作区，例如 `<你的工作区>/dsh-session-delete`。
-2. 在 Harness 中打开插件管理，选择 **安装 Bundle**，目标指向该目录。
-3. 安装完成后在插件列表确认 `session-delete` 条目为启用状态。
+1. 打开 Harness 的 **插件管理**。
+2. 选择 **安装 Bundle**，粘贴仓库链接：
+   ```text
+   https://gitee.com/tianjingzai/dsh-session-delete.git
+   ```
+   （也可用 `git+https://` 形式，或追加 `#<commit>` 锁定版本。）
+3. 安装完成后在插件列表确认 `dsh-session-delete` 为启用状态（`session-delete` 条目）。
 
 安装后即生效：打开任一会话的「⋯」菜单，最下方出现 **删除会话**。
 
-### 方式二：手动放置
+### 方式二：本地目录安装
 
-1. 将整个包复制到 profile 的 `node_modules/@local/dsh-session-delete`：
+1. 将本目录（或发行包解压目录）放置到你的工作区，例如 `<你的工作区>/dsh-session-delete`。
+2. 在 Harness 中打开插件管理，选择 **安装 Bundle**，目标指向该目录。
+
+### 方式三：手动放置
+
+1. 将整个包复制到 profile 的 `node_modules/dsh-session-delete`：
    ```text
-   <profile>/node_modules/@local/dsh-session-delete/
+   <profile>/node_modules/dsh-session-delete/
    ```
 2. 确认 profile 的 `cordis.patch.yml`（或等效补丁聚合）中包含：
    ```yaml
    - insert:
        - id: session-delete
-         name: '@local/dsh-session-delete'
+         name: 'dsh-session-delete'
    ```
 3. 重启（或热重载）Harness。
 
