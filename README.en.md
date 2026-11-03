@@ -23,11 +23,14 @@ hiding it or silently moving it into the "Ungrouped" bucket.
     unarchive).
 - **The UI updates instantly**: after deletion the official `api-session/removed`
   event is emitted, so the session disappears from the list without a restart.
-- **Guarded for in-use sessions (two layers)**: the session currently open in the
-  sidebar (retained by the GUI, `retainedBy.mainView`) is refused straight in the
-  client with a clear message; the host additionally refuses with a 409 only while
-  an Agent is **actually executing a turn** (`agent/status === running`). Idle
-  sessions — even ones the host still has mounted — can be deleted at any time.
+- **The current session can be deleted too**: the GUI's currently-open session is
+  no longer refused; after a successful delete the main panel automatically opens
+  the next session in the list (or the empty state when none remain), so it never
+  stays bound to a deleted conversation.
+- **Guarded for actually-running work**: the host refuses with a 409 only while an
+  Agent is **actually executing a turn** (`agent/status === running`). Idle
+  sessions — even ones the host still has mounted or that the GUI currently shows —
+  can be deleted at any time.
 - **Idempotent and safe**: missing targets are skipped silently; `sessionId` is
   validated as a single safe path segment (rejects `/`, `\`, NUL), preventing path
   traversal. Orphaned rows whose log directory is already gone (e.g. a
@@ -51,9 +54,13 @@ performs removal in three coordinated steps on the host side:
 3. **Notify**: `emit("api-session/removed", sessionId)` drives the client projection
    update so the session is removed from the UI immediately.
 
-> Guards: the client refuses the session currently open in the GUI; the host
-> tracks sessions whose Agent is **actively executing** through `agent/status`
-> events and refuses those with a 409. Idle sessions are never blocked.
+> Guards: the host tracks sessions whose Agent is **actively executing** through
+> `agent/status` events and refuses those with a 409. Idle sessions are never
+> blocked. When the session currently open in the GUI is deleted, the client first
+> warns in the confirmation dialog, then hands the main panel to another session
+> via `uiWorkspace.openSession` (or `startSession` for the empty state) — the
+> framework does not automatically release the removed session's `mainView`
+> retention.
 
 The deletion capability is exposed by an authenticated host route
 `POST /api/session-delete` (body `{ sessionId }`), which the client menu item calls
@@ -122,6 +129,7 @@ session** appears at the bottom.
 | Menu rendering | The session menu gains a "Delete session" entry at the end |
 | Click delete | A confirmation dialog warns the operation cannot be undone |
 | After confirming | Workspace references are dropped → log and projection cache are deleted → the list refreshes instantly |
+| Delete the current session | The dialog additionally notes that the main panel will switch away; after a successful delete the plugin calls `openSession` on the next session (or the empty state when none remain) |
 
 ## Layout
 

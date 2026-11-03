@@ -10,6 +10,6 @@
     "irreversible": "This deletes the session log and projection cache and removes the session from its workspace. This cannot be undone.",
     "pending": "Deleting…",
     "error": "Delete failed",
-    "currentRefusal": "The current session is in use and cannot be deleted. Switch to another session first."
+    "currentNotice": "You are deleting the session currently open in the main view. After deletion the main panel will switch to another session (or to the empty state when none remain)."
   }
 }

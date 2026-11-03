@@ -34,7 +34,7 @@ window.__ModuleLoader__.load({
         "delete.irreversible": "这将同时删除会话日志、投影缓存并从工作区中移除该会话。此操作不可恢复。",
         "delete.pending": "删除中…",
         "delete.error": "删除失败",
-        "delete.currentRefusal": "当前会话正在使用中，无法删除。请先切换到其他会话。"
+        "delete.currentNotice": "你正在删除当前打开的会话：删除成功后，主窗口将自动切换到其它会话（没有其它会话时则显示空状态）。"
       },
       en: {
         "delete.label": "Delete session",
@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({
         "delete.irreversible": "This deletes the session log and projection cache and removes the session from its workspace. This cannot be undone.",
         "delete.pending": "Deleting…",
         "delete.error": "Delete failed",
-        "delete.currentRefusal": "The current session is in use and cannot be deleted. Switch to another session first."
+        "delete.currentNotice": "You are deleting the session currently open in the main view. After deletion the main panel will switch to another session (or to the empty state when none remain)."
       }
     };
 
@@ -65,10 +65,8 @@ window.__ModuleLoader__.load({
     /**
      * Resolve the currently retained main conversation from the framework's
      * `useSessions` selector (the same data the built-in browser reads:
-     * `byId[id].retainedBy.mainView > 0`). Deletion of that session is refused
-     * client-side, because an in-use conversation is not necessarily "live" on
-     * the host between turns (its Agent has quiesced) and deleting it would
-     * destroy the log the user is still writing to.
+     * `byId[id].retainedBy.mainView > 0`). Deleting THAT session is now allowed,
+     * but its main-view retention must be handed off afterwards.
      */
     function useCurrentMainSessionId(useSessions) {
       if (typeof useSessions !== "function") return undefined;
@@ -84,6 +82,32 @@ window.__ModuleLoader__.load({
         });
       } catch (err) {
         return undefined;
+      }
+    }
+
+    /**
+     * Resolve the ids of the sessions OTHER than the one this row shows, in
+     * list order. Used after deleting the current session: the framework does
+     * NOT release a removed session's main-view retention by itself
+     * (`publishMain` keeps the retained id while `retainedBy.mainView > 0`), so
+     * the plugin hands the main view the next available session instead.
+     * @param useSessions - the owner-injected session selector hook.
+     * @param self - the session this row is deleting.
+     * @returns the ordered candidate ids, excluding `self`.
+     */
+    function useOtherSessionIds(useSessions, self) {
+      if (typeof useSessions !== "function") return [];
+      try {
+        return useSessions((snapshot) => {
+          const ids = snapshot && Array.isArray(snapshot.ids)
+            ? snapshot.ids
+            : snapshot && snapshot.byId
+              ? Object.keys(snapshot.byId)
+              : [];
+          return ids.filter((id) => id !== self);
+        });
+      } catch (err) {
+        return [];
       }
     }
 
@@ -109,16 +133,41 @@ window.__ModuleLoader__.load({
       const closeMenu = useCloseMenu(props && props.useMenuOpenState);
       const currentMainId = useCurrentMainSessionId(props && props.useSessions);
       const isCurrentSession = typeof sessionId === "string" && currentMainId === sessionId;
+      const otherSessionIds = useOtherSessionIds(props && props.useSessions, sessionId);
+      // `uiWorkspace` (client navigation service) is injected from `apply` so the
+      // plugin can hand the main view to another session after deleting the one
+      // that is currently open. Absent/unavailable shapes degrade to a no-op.
+      const uiWorkspace = props && props.uiWorkspace;
       const label = text("delete.label");
+
+      /**
+       * After deleting the session that is open in the main view, move that view
+       * somewhere valid. The shipped session store keeps `retainedBy.mainView`
+       * on a removed session (it does not auto-release), so without this the
+       * Conversation would stay bound to the dead session. Opening another
+       * session makes `uiWorkspace` release the old mainView reference and
+       * retain the new one; with nothing else left, `startSession` (no target)
+       * lands on the fresh/empty state. Best-effort: never throws after a
+       * successful delete.
+       */
+      function handOffMainView() {
+        if (typeof uiWorkspace !== "object" || uiWorkspace === null) return;
+        try {
+          const nextId = Array.isArray(otherSessionIds)
+            ? otherSessionIds.find((id) => typeof id === "string")
+            : undefined;
+          if (typeof nextId === "string" && typeof uiWorkspace.openSession === "function") {
+            uiWorkspace.openSession(nextId);
+          } else if (typeof uiWorkspace.startSession === "function") {
+            uiWorkspace.startSession();
+          }
+        } catch (err) {
+          // navigation is a courtesy; a failure must never surface as an error
+        }
+      }
 
       const onDelete = async () => {
         if (busy || typeof sessionId !== "string") return;
-        // The session that is open in the GUI right now cannot be deleted,
-        // even though its Agent may be idle on the host between turns.
-        if (isCurrentSession) {
-          setError(text("delete.currentRefusal"));
-          return;
-        }
         const name = displayTitle.trim() === "" ? sessionId : displayTitle;
         const message = [
           text("delete.confirmTitle"),
@@ -126,8 +175,11 @@ window.__ModuleLoader__.load({
           text("delete.confirm") + "\n\u201C" + name + "\u201D",
           "",
           text("delete.irreversible")
-        ].join("\n");
-        if (typeof window !== "undefined" && !window.confirm(message)) return;
+        ];
+        // Deleting the currently-open session also moves the main view away;
+        // surface that consequence before the user confirms.
+        if (isCurrentSession) message.push("", text("delete.currentNotice"));
+        if (typeof window !== "undefined" && !window.confirm(message.join("\n"))) return;
 
         setBusy(true);
         setError(null);
@@ -147,6 +199,7 @@ window.__ModuleLoader__.load({
             const msg = payload && payload.error && payload.error.message ? payload.error.message : "HTTP " + response.status;
             throw new Error(msg);
           }
+          if (isCurrentSession) handOffMainView();
           closeMenu();
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
@@ -287,7 +340,17 @@ window.__ModuleLoader__.load({
               } catch (err) {
                 // locale service unavailable; the zh default dictionary applies.
               }
-              return { lang: lang };
+              // The client navigation service, for handing the main view to
+              // another session after deleting the currently-open one. The
+              // component only uses it when available (see its typeof guard).
+              let uiWorkspace;
+              try {
+                const service = ctx.get("uiWorkspace");
+                if (typeof service === "object" && service !== null) uiWorkspace = service;
+              } catch (err) {
+                uiWorkspace = void 0;
+              }
+              return { lang: lang, uiWorkspace: uiWorkspace };
             }
           }, DeleteSessionMenuItem);
         });
